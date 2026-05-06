@@ -1,0 +1,96 @@
+# TRiSM Configuration File - all 5 pillars
+
+model:
+  name: "phi3.5"
+  version: "1.0.0"
+  provider: "ollama"
+  context_length: 4096
+  parameters:
+    temperature: 0.7
+    top_p: 0.9
+
+# Pilar 1 - Explicabilidade
+explainability:
+  enabled: true
+  log_chain_of_thought: true
+  confidence_threshold: 0.7
+
+# Pilar 2 - ModelOps
+modelops:
+  enabled: true
+  versioning: true
+  monitoring:
+    latency_threshold_ms: 5000
+    drift_threshold: 0.3
+    token_alert_threshold: 10000
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 30
+    window_seconds: 60
+  health_check:
+    interval_seconds: 30
+    timeout_seconds: 10
+
+# Pilar 3 - AppSec
+appsec:
+  enabled: true
+  max_message_length: 4000
+  blocked_patterns:
+    - "ignore.*instructions"
+    - "forget.*rules"
+    - "system prompt"
+    - "you are now"
+    - "pretend you are"
+    - "from now on"
+    - "new role:"
+  sanitize_output: true
+  sanitize_input: true
+
+# Pilar 4 - Privacidade
+privacy:
+  enabled: true
+  redact_pii: true
+  pii_patterns:
+    cpf: "\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}"
+    email: "[\\w\\.-]+@[\\w\\.-]+\\.\\w+"
+    phone: "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}"
+    rg: "\\d{2}\\.\\d{3}\\.\\d{3}-\\d"
+    credit_card: "\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}"
+  data_retention_days: 30
+  require_consent: true
+
+# Pilar 5 - Resistência Adversária
+adversarial:
+  enabled: true
+  jailbreak_patterns:
+    - ".*jailbreak.*"
+    - ".*DAN.*"
+    - ".*ignore previous.*"
+    - ".*system prompt.*"
+    - ".*developer mode.*"
+    - ".*no restrictions.*"
+  max_repetition_ratio: 0.5
+  repetition_window: 100
+  block_suspicious: true
+
+# Toxicidade
+toxicity:
+  enabled: true
+  blocked_terms:
+    - "hate"
+    - "kill"
+    - "murder"
+    - "rape"
+    - "terrorist"
+    - "bomb"
+    - "suicide"
+    - "racist"
+    - "sexist"
+    - "homophobic"
+
+# Logs
+logging:
+  audit_file: "audit_log.jsonl"
+  metrics_file: "metrics.json"
+  retention_days: 30
+  max_log_size_mb: 100
