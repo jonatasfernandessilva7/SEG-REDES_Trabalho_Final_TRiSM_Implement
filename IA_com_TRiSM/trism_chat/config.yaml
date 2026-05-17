@@ -1,4 +1,7 @@
-# TRiSM Configuration File - all 5 pillars
+# ============================================================================
+# TRiSM Chat v2 — Configuração Fortalecida
+# Compatível com a versão original; campos novos têm comentários "[v2]".
+# ============================================================================
 
 model:
   name: "phi3.5"
@@ -8,72 +11,107 @@ model:
   parameters:
     temperature: 0.7
     top_p: 0.9
+  request_logprobs: true   # [v2] habilita logprobs do Ollama para confidence real
 
+# ----------------------------------------------------------------------------
 # Pilar 1 - Explicabilidade
+# ----------------------------------------------------------------------------
 explainability:
   enabled: true
   log_chain_of_thought: true
   confidence_threshold: 0.7
 
+# ----------------------------------------------------------------------------
 # Pilar 2 - ModelOps
+# ----------------------------------------------------------------------------
 modelops:
   enabled: true
   versioning: true
   monitoring:
     latency_threshold_ms: 5000
-    drift_threshold: 0.3
+    psi_threshold: 0.25            # [v2] PSI (Population Stability Index)
+    js_threshold: 0.30             # [v2] Jensen-Shannon divergence
     token_alert_threshold: 10000
+    baseline_window: 50            # [v2] tamanho do baseline para drift
+    cost_per_1k_input_tokens: 0.0  # [v2] estimativa de custo (LLM10)
+    cost_per_1k_output_tokens: 0.0
   rate_limiting:
     enabled: true
     requests_per_minute: 30
+    per_user_per_minute: 60        # [v2]
+    per_ip_per_minute: 100         # [v2]
+    window_seconds: 60
+  token_budget:                    # [v2] LLM10 - Unbounded Consumption
+    enabled: true
+    tokens_per_window: 50000
     window_seconds: 60
   health_check:
     interval_seconds: 30
     timeout_seconds: 10
 
+# ----------------------------------------------------------------------------
 # Pilar 3 - AppSec
+# ----------------------------------------------------------------------------
 appsec:
   enabled: true
   max_message_length: 4000
-  blocked_patterns:
-    - "ignore.*instructions"
-    - "forget.*rules"
-    - "system prompt"
-    - "you are now"
-    - "pretend you are"
-    - "from now on"
-    - "new role:"
-  sanitize_output: true
+  use_prompt_hierarchy: true       # [v2] PALADIN Layer 2
+  output_validation: true          # [v2] PALADIN Layer 5
+  block_encoded_payloads: true     # [v2] bloqueia Base64/Hex suspeitos
+  block_indirect_injection: true   # [v2]
   sanitize_input: true
+  sanitize_output: true
+  blocked_patterns:
+    - "ignore\\s+(?:all\\s+)?previous\\s+instructions"
+    - "forget\\s+(?:everything|all\\s+)?(?:rules|prompts)"
+    - "system\\s+prompt"
+    - "you\\s+are\\s+now"
+    - "pretend\\s+you\\s+are"
+    - "from\\s+now\\s+on"
+    - "new\\s+role:"
+  indirect_injection_markers:      # [v2]
+    - "[SYSTEM]"
+    - "[INSTRUCTION]"
+    - "<!-- system:"
+    - "###system###"
+    - "<<system>>"
+    - "<system_override>"
 
-# Pilar 4 - Privacidade
+# ----------------------------------------------------------------------------
+# Pilar 4 - Privacidade (PII brasileira completa)
+# ----------------------------------------------------------------------------
 privacy:
   enabled: true
   redact_pii: true
-  pii_patterns:
-    cpf: "\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}"
-    email: "[\\w\\.-]+@[\\w\\.-]+\\.\\w+"
-    phone: "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}"
-    rg: "\\d{2}\\.\\d{3}\\.\\d{3}-\\d"
-    credit_card: "\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}"
+  pseudonymize: true                # [v2] pseudonimização determinística
+  pseudonym_salt: "TRiSM-default-salt"
+  consent_mode: "env"               # [v2] 'interactive'|'auto_grant'|'auto_deny'|'env'
   data_retention_days: 30
   require_consent: true
+  # pii_patterns omitido: usa DEFAULT_PATTERNS_BR (CPF, CNPJ, RG, CNH, PIS,
+  # título de eleitor, CEP, email, phone, credit_card, ip_address, IBAN)
+  # Descomente abaixo para customizar:
+  # pii_patterns:
+  #   cpf: "\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}"
 
+# ----------------------------------------------------------------------------
 # Pilar 5 - Resistência Adversária
+# ----------------------------------------------------------------------------
 adversarial:
   enabled: true
-  jailbreak_patterns:
-    - ".*jailbreak.*"
-    - ".*DAN.*"
-    - ".*ignore previous.*"
-    - ".*system prompt.*"
-    - ".*developer mode.*"
-    - ".*no restrictions.*"
-  max_repetition_ratio: 0.5
+  multiturn_window: 6                            # [v2]
   repetition_window: 100
+  repetition_jaccard_threshold: 0.85             # [v2]
+  repetition_levenshtein_threshold: 0.85         # [v2]
+  extraction_min_keywords: 2                     # [v2]
+  block_threshold: 0.5                           # [v2] confidence p/ bloqueio
   block_suspicious: true
+  # padrões legacy (incorporados como "custom" sobre as 5 categorias built-in)
+  jailbreak_patterns: []
 
+# ----------------------------------------------------------------------------
 # Toxicidade
+# ----------------------------------------------------------------------------
 toxicity:
   enabled: true
   blocked_terms:
@@ -88,9 +126,22 @@ toxicity:
     - "sexist"
     - "homophobic"
 
+# ----------------------------------------------------------------------------
 # Logs
+# ----------------------------------------------------------------------------
 logging:
   audit_file: "audit_log.jsonl"
   metrics_file: "metrics.json"
   retention_days: 30
   max_log_size_mb: 100
+  encrypt: false                # [v2] true requer cryptography (Fernet/AES)
+  # encryption_key: gerada automaticamente em audit_log.key se ausente
+
+# ----------------------------------------------------------------------------
+# Benchmark (NOVO em v2)
+# ----------------------------------------------------------------------------
+benchmark:
+  dataset_path: "benchmark/datasets/owasp_llm_top10_pt.json"
+  results_dir: "benchmark/results"
+  tivs_weights: [0.25, 0.25, 0.25, 0.25]
+  compare_baseline: true

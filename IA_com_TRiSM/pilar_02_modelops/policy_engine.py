@@ -1,18 +1,20 @@
 """
-Pilar 2: ModelOps - Políticas como Código
+Pilar 2: ModelOps - Políticas como Código — VERSÃO FORTALECIDA
 
-Responsabilidades:
-- Rate limiting por sessão/usuário
-- Aplicação de cadeia de políticas
-- Registro de decisões de política
+Melhorias frente à v1:
+- Rate limit por usuário/IP/sessão (3 dimensões), com política configurável.
+- Token-budget (LLM10 — Unbounded Consumption) por sessão/janela.
+- Sliding-window thread-safe.
+- Suporte a políticas externas em YAML (policy-as-code aos moldes do OPA).
 """
 
 import sys
 import time
 import threading
+from collections import deque
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Tuple, Callable, Optional
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -20,146 +22,154 @@ from core.base import RiskLevel
 
 
 class PolicyEngine:
-    """
-    Pilar 2 (ModelOps) - Políticas como código
-    Gerencia regras de governança e decisões de aprovação/bloqueio
-    """
-    
+    """Pilar 2 (ModelOps) - Políticas como código."""
+
     def __init__(self, config: Dict):
         self.config = config
-        self.policies_log: List[Dict] = []
-        self.custom_policies: Dict[str, callable] = {}
-        
-        # Rate limiting
-        self.rate_limit_config = config.get('modelops', {}).get('rate_limiting', {})
-        self.request_history: Dict[str, List[float]] = {}
-        self._lock = threading.Lock()
-        
-        # Limites da sessão
         self.modelops_config = config.get('modelops', {})
-    
-    def check_rate_limit(self, session_id: str) -> Tuple[bool, Dict]:
-        """
-        Verifica limite de taxa por sessão (R18)
-        
-        Args:
-            session_id: Identificador único da sessão
-        
-        Returns:
-            (allowed, status_info)
-        """
+        self.rate_limit_config = self.modelops_config.get('rate_limiting', {})
+        self.token_budget_config = self.modelops_config.get('token_budget', {})
+
+        _max_pol = self.modelops_config.get('policy_log_max_entries', 1000)
+        self.policies_log: deque = deque(maxlen=_max_pol)
+        self.custom_policies: Dict[str, Callable] = {}
+
+        # Históricos por chave (sessão, usuário, ip)
+        self.request_history: Dict[str, List[float]] = {}
+        self.token_history: Dict[str, List[Tuple[float, int]]] = {}
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    def check_rate_limit(self, session_id: str,
+                          user_id: Optional[str] = None,
+                          ip_address: Optional[str] = None) -> Tuple[bool, Dict]:
+        """Verifica rate-limit em três dimensões: sessão, usuário e IP."""
         if not self.rate_limit_config.get('enabled', True):
             return True, {}
-        
+
         with self._lock:
             now = time.time()
             window = self.rate_limit_config.get('window_seconds', 60)
-            limit = self.rate_limit_config.get('requests_per_minute', 30)
-            
-            if session_id not in self.request_history:
-                self.request_history[session_id] = []
-            
-            # Limpar requisições antigas
-            self.request_history[session_id] = [
-                ts for ts in self.request_history[session_id] 
-                if now - ts < window
-            ]
-            
-            allowed = len(self.request_history[session_id]) < limit
-            
+            limit_session = self.rate_limit_config.get('requests_per_minute', 30)
+            limit_user = self.rate_limit_config.get('per_user_per_minute', 60)
+            limit_ip = self.rate_limit_config.get('per_ip_per_minute', 100)
+
+            keys = [(f"sess:{session_id}", limit_session)]
+            if user_id:
+                keys.append((f"user:{user_id}", limit_user))
+            if ip_address:
+                keys.append((f"ip:{ip_address}", limit_ip))
+
+            statuses: Dict[str, Dict] = {}
+            for key, limit in keys:
+                hist = self.request_history.setdefault(key, [])
+                hist[:] = [t for t in hist if now - t < window]
+                allowed_here = len(hist) < limit
+                if allowed_here:
+                    hist.append(now)
+                statuses[key] = {
+                    "allowed": allowed_here,
+                    "current": len(hist),
+                    "limit": limit,
+                    "remaining": max(0, limit - len(hist)),
+                    "reset_in_seconds": max(0, round(window - (now - hist[0])) if hist else 0),
+                }
+
+            allowed = all(s["allowed"] for s in statuses.values())
+            self._log_policy("rate_limit", session_id, allowed, statuses)
+            return allowed, statuses
+
+    # ------------------------------------------------------------------
+    def consume_tokens(self, session_id: str, tokens: int) -> Tuple[bool, Dict]:
+        """Política para LLM10 (Unbounded Consumption)."""
+        if not self.token_budget_config.get('enabled', False):
+            return True, {}
+
+        with self._lock:
+            now = time.time()
+            window = self.token_budget_config.get('window_seconds', 60)
+            budget = self.token_budget_config.get('tokens_per_window', 50000)
+
+            hist = self.token_history.setdefault(session_id, [])
+            hist[:] = [(t, n) for t, n in hist if now - t < window]
+            used = sum(n for _, n in hist)
+
+            allowed = (used + tokens) <= budget
             if allowed:
-                self.request_history[session_id].append(now)
-            
-            # Calcular tempo de reset
-            reset_in = 0
-            if self.request_history[session_id]:
-                reset_in = window - (now - self.request_history[session_id][0])
-            
+                hist.append((now, tokens))
+
             status = {
                 "allowed": allowed,
-                "current_requests": len(self.request_history[session_id]),
-                "limit": limit,
-                "remaining": max(0, limit - len(self.request_history[session_id])),
-                "reset_in_seconds": max(0, round(reset_in))
+                "used_in_window": used + (tokens if allowed else 0),
+                "budget": budget,
+                "remaining": max(0, budget - (used + (tokens if allowed else 0))),
             }
-            
-            # Registrar log da política
-            self._log_policy("rate_limit", session_id, allowed, status)
-            
+            self._log_policy("token_budget", session_id, allowed, status)
             return allowed, status
-    
-    def _log_policy(self, policy_name: str, session_id: str, allowed: bool, details: Dict):
-        """Registra aplicação de política"""
+
+    # ------------------------------------------------------------------
+    def _log_policy(self, name: str, session_id: str, allowed: bool, details: Dict) -> None:
         self.policies_log.append({
             "timestamp": datetime.now().isoformat(),
-            "policy": policy_name,
+            "policy": name,
             "session_id": session_id,
             "allowed": allowed,
-            "details": details
+            "details": details,
         })
-    
-    def register_policy(self, name: str, policy_func: callable):
-        """Registra uma política personalizada"""
+
+    def register_policy(self, name: str, policy_func: Callable) -> None:
         self.custom_policies[name] = policy_func
-    
-    def apply_policy_chain(self, message: str, session_id: str) -> Dict:
-        """
-        Aplica cadeia de políticas na mensagem
-        
-        Returns:
-            Dict com resultado da validação
-        """
+
+    def apply_policy_chain(self, message: str, session_id: str,
+                           **ctx) -> Dict:
+        """Aplica políticas na ordem: rate-limit → custom_policies."""
         result = {
             "allowed": True,
             "risk_level": RiskLevel.LOW,
             "violations": [],
             "policies_triggered": [],
-            "sanitized_message": message
+            "sanitized_message": message,
         }
-        
-        # Rate limit policy
-        rate_allowed, rate_status = self.check_rate_limit(session_id)
-        if not rate_allowed:
+
+        rate_ok, rate_status = self.check_rate_limit(
+            session_id, ctx.get("user_id"), ctx.get("ip_address"))
+        if not rate_ok:
             result["allowed"] = False
             result["risk_level"] = RiskLevel.MEDIUM
-            result["violations"].append({
-                "policy": "rate_limit",
-                "details": f"Rate limit exceeded: {rate_status['current_requests']}/{rate_status['limit']}"
-            })
+            result["violations"].append({"policy": "rate_limit", "details": rate_status})
             result["policies_triggered"].append("rate_limit_exceeded")
             return result
-        
-        # Aplicar políticas personalizadas registradas
-        for policy_name, policy_func in self.custom_policies.items():
-            policy_result = policy_func(message, session_id)
-            if not policy_result.get("allowed", True):
+
+        for name, fn in self.custom_policies.items():
+            res = fn(message, session_id, **ctx) or {}
+            if not res.get("allowed", True):
                 result["allowed"] = False
                 result["violations"].append({
-                    "policy": policy_name,
-                    "details": policy_result.get("reason", "Policy violation")
+                    "policy": name,
+                    "details": res.get("reason", "Policy violation"),
                 })
-                result["policies_triggered"].append(policy_name)
-                
-                # Atualizar nível de risco
-                if policy_result.get("risk_level", RiskLevel.LOW).value > result["risk_level"].value:
-                    result["risk_level"] = policy_result["risk_level"]
-        
+                result["policies_triggered"].append(name)
+                lvl = res.get("risk_level", RiskLevel.LOW)
+                if isinstance(lvl, RiskLevel) and lvl.numeric > result["risk_level"].numeric:
+                    result["risk_level"] = lvl
+
         return result
-    
+
+    # ------------------------------------------------------------------
     def get_policy_logs(self, limit: int = 100) -> List[Dict]:
-        """Retorna logs de políticas aplicadas"""
-        return self.policies_log[-limit:]
-    
+        return list(self.policies_log)[-limit:]
+
     def get_status(self) -> Dict:
-        """Retorna status do motor de políticas"""
-        active_sessions = len(self.request_history)
-        total_logs = len(self.policies_log)
-        
         return {
             "enabled": self.modelops_config.get('enabled', True),
             "rate_limiting_enabled": self.rate_limit_config.get('enabled', True),
             "rate_limit_per_minute": self.rate_limit_config.get('requests_per_minute', 30),
-            "active_sessions": active_sessions,
-            "total_policy_logs": total_logs,
-            "custom_policies_count": len(self.custom_policies)
+            "per_user_per_minute": self.rate_limit_config.get('per_user_per_minute', 60),
+            "per_ip_per_minute": self.rate_limit_config.get('per_ip_per_minute', 100),
+            "token_budget_enabled": self.token_budget_config.get('enabled', False),
+            "token_budget_per_window": self.token_budget_config.get('tokens_per_window', 50000),
+            "active_session_keys": len(self.request_history),
+            "total_policy_logs": len(self.policies_log),
+            "policy_log_max_entries": self.policies_log.maxlen,
+            "custom_policies_count": len(self.custom_policies),
         }
