@@ -99,6 +99,8 @@ Sistema de chat inteligente **sem aplicação de pilares TRiSM** (para comparaç
 
 - Python 3.8+
 - Ollama instalado e executando
+  - <a>https://ollama.com/download</a>
+  - ollama run phi3.5
 - Dependências do projeto
 
 ### Instalação
