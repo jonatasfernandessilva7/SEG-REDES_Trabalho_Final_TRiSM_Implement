@@ -47,8 +47,8 @@ def convert_log_to_csv(input_path: Path, output_csv: Path):
     print(f"Convertido {len(df)} registros para {output_csv}")
 
 if __name__ == "__main__":
-    input_file = Path(r"C:\Users\jonat\Downloads\SEG-REDES_Trabalho_Final_TRiSM_Implement\IA_com_TRiSM\tests\trism_execution_log_20260516_122822.json")
-    output_file = Path(r"C:\Users\jonat\Downloads\SEG-REDES_Trabalho_Final_TRiSM_Implement\analise_dos_resultados\audit_data.csv")
+    input_file = Path(r"/trism/SEG-REDES_Trabalho_Final_TRiSM_Implement/IA_com_TRiSM/tests/trism_execution_log_20260524_141432.json")
+    output_file = Path(r"/trism/SEG-REDES_Trabalho_Final_TRiSM_Implement/analise_dos_resultados_com_ML/audit_data_off.csv")
 
     if input_file.exists():
         convert_log_to_csv(input_file, output_file)
@@ -58,5 +58,5 @@ if __name__ == "__main__":
         if not root.exists():
             root = Path.cwd()  
         print(f"Procurando em: {root}")
-        for f in root.rglob("*.json") + list(root.rglob("*.jsonl")):
+        for f in root.rglob("*.json"):
             print(f"Encontrado: {f}")
