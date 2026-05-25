@@ -48,7 +48,7 @@ def convert_log_to_csv(input_path: Path, output_csv: Path):
 
 if __name__ == "__main__":
     input_file = Path(r"C:\Users\jonat\Downloads\SEG-REDES_Trabalho_Final_TRiSM_Implement\IA_com_TRiSM\tests\trism_execution_log_20260516_122822.json")
-    output_file = Path(r"C:\Users\jonat\Downloads\SEG-REDES_Trabalho_Final_TRiSM_Implement\utils\audit_data.csv")
+    output_file = Path(r"C:\Users\jonat\Downloads\SEG-REDES_Trabalho_Final_TRiSM_Implement\analise_dos_resultados\audit_data.csv")
 
     if input_file.exists():
         convert_log_to_csv(input_file, output_file)
