@@ -1,27 +1,5 @@
 """
-TRiSM Hybrid Clustering Analysis
-================================
-
-Pipeline:
-1. Carrega datasets OFF e ON
-2. Engenharia de atributos
-3. Normalização
-4. PCA (7 componentes)
-5. Escolha automática de K pelo Silhouette
-6. K-Means
-7. GMM inicializado pelos centroides do K-Means
-8. Cálculo de incerteza
-9. Cálculo de entropia
-10. Isolation Forest
-11. Métricas de clusterização
-12. Comparação TRiSM ON x OFF
-13. Exportação dos resultados
-
-Uso:
-
-python trism_hybrid_analysis.py \
-    --off audit_data_off.csv \
-    --on audit_data_on.csv
+comando para rodar: python trism_hybrid_analysis.py --off audit_data_off.csv --on audit_data_on.csv
 """
 
 import argparse

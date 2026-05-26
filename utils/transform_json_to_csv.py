@@ -47,8 +47,8 @@ def convert_log_to_csv(input_path: Path, output_csv: Path):
     print(f"Convertido {len(df)} registros para {output_csv}")
 
 if __name__ == "__main__":
-    input_file = Path(r"/trism/SEG-REDES_Trabalho_Final_TRiSM_Implement/IA_com_TRiSM/tests/trism_execution_log_20260524_141432.json")
-    output_file = Path(r"/trism/SEG-REDES_Trabalho_Final_TRiSM_Implement/analise_dos_resultados_com_ML/audit_data_off.csv")
+    input_file = Path(r"caminho/para/seu/log.json")  # Substitua pelo caminho real do seu arquivo JSON
+    output_file = Path(r"caminho/para/saida.csv")  # Substitua pelo caminho desejado para o CSV de saída
 
     if input_file.exists():
         convert_log_to_csv(input_file, output_file)
