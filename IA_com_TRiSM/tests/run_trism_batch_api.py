@@ -64,12 +64,14 @@ class TRiSMApiBatchEvaluator:
             response = requests.post(
                 f"{self.api_url}/api/message",
                 json=payload,
-                timeout=600
+                timeout=1200  # 20 minutos para respostas complexas
             )
             latency = (time.time() - start_time) * 1000
             
             if response.status_code == 200:
                 data = response.json()
+                logprobs_data = data.get("logprobs", {})
+                token_logprobs = logprobs_data.get("token_logprobs", [])
                 # Atualiza session_id se for primeira chamada
                 if not self.session_id:
                     self.session_id = data.get("session_id")
@@ -86,6 +88,7 @@ class TRiSMApiBatchEvaluator:
                         "owasp_categories": data.get("owasp_categories", []),
                         "input_tokens": data.get("input_tokens", 0),
                         "output_tokens": data.get("output_tokens", 0),
+                        "logprobs": token_logprobs,  
                     }
                 )
             else:

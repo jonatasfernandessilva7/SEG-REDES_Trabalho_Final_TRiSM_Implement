@@ -1,7 +1,6 @@
 """
-Pilar 1: Explicabilidade e Transparência (XAI) — VERSÃO FORTALECIDA
+Pilar 1: Explicabilidade e Transparência (XAI)
 
-Melhorias frente à v1:
 - Confiança baseada em logprobs do Ollama (quando disponível) ao invés de fórmula linear.
 - DecisionTrace estruturado por pilar/regra/evidência (Raza et al. 2026).
 - Export do raciocínio em formato OVON-like (Gosmar et al. 2025).
@@ -34,9 +33,6 @@ class ExplainabilityEngine:
         self.reasoning_logs: deque = deque(maxlen=_max)
         self.decision_traces: deque = deque(maxlen=_max)
 
-    # ------------------------------------------------------------------
-    # API pública
-    # ------------------------------------------------------------------
     def generate_explanation(self, action: str, reason: str, policy_triggered: str = None,
                              confidence: float = 0.0, details: Dict = None) -> Dict:
         if not self.enabled:
@@ -71,60 +67,34 @@ class ExplainabilityEngine:
             return
         self.decision_traces.append(traces)
 
-    # ------------------------------------------------------------------
-    # Confiança real baseada em logprobs (NOVO)
-    # ------------------------------------------------------------------
     @staticmethod
-    def confidence_from_logprobs(ollama_response: Dict[str, Any]) -> Optional[float]:
-        """Estima confiança usando logprobs reais retornados pelo Ollama.
-
-        O Ollama, quando configurado com options={"logprobs": True}, retorna
-        token-level logprobs. Calculamos a média geométrica da probabilidade
-        por token (perplexidade-inversa normalizada).
-
-        Returns:
-            Confiança ∈ (0, 1] ou None se logprobs ausentes.
-        """
-        try:
-            tokens = (ollama_response or {}).get("logprobs") or []
-            if not tokens:
-                # Tenta caminho alternativo (chat completions style)
-                msg = (ollama_response or {}).get("message", {})
-                tokens = msg.get("logprobs", {}).get("tokens", [])
-            if not tokens:
-                return None
-            logps = []
-            for t in tokens:
-                if isinstance(t, dict) and "logprob" in t:
-                    logps.append(float(t["logprob"]))
-                elif isinstance(t, (int, float)):
-                    logps.append(float(t))
-            if not logps:
-                return None
-            avg = sum(logps) / len(logps)
-            # Probabilidade média geométrica = exp(avg log p)
-            return float(min(1.0, max(0.0, math.exp(avg))))
-        except Exception:
+    def confidence_from_logprobs(logprobs_list: List[float]) -> Optional[float]:
+        """Recebe uma lista de logprobs por token e retorna confiança média geométrica."""
+        if not logprobs_list:
             return None
-
+        # Remove possíveis None (Ollama pode colocar None no primeiro token)
+        clean = [lp for lp in logprobs_list if lp is not None]
+        if not clean:
+            return None
+        avg_logp = sum(clean) / len(clean)
+        # Probabilidade média = exp(avg_logp)
+        return float(math.exp(avg_logp))
+    
     def calculate_confidence(self, violations: List[str],
                              has_anomalies: bool = False,
-                             logprobs_confidence: Optional[float] = None) -> float:
-        """Calcula confiança final combinando heurística com logprobs (se houver)."""
-        # Heurística - mantém compatibilidade
+                             logprobs_list: Optional[List[float]] = None) -> float:
+        """Calcula confiança combinando heurística e logprobs reais"""
         base = 1.0 - 0.10 * len(violations)
         if has_anomalies:
             base -= 0.15
         base = max(0.0, min(1.0, base))
 
-        # Se temos confidence real do modelo, faz média ponderada (60% logprobs, 40% heurística)
-        if logprobs_confidence is not None:
-            return round(0.6 * logprobs_confidence + 0.4 * base, 4)
+        if logprobs_list is not None:
+            logprob_conf = self.confidence_from_logprobs(logprobs_list)
+            if logprob_conf is not None:
+                return round(0.6 * logprob_conf + 0.4 * base, 4)
         return round(base, 4)
 
-    # ------------------------------------------------------------------
-    # Relatórios
-    # ------------------------------------------------------------------
     def get_confidence_summary(self) -> Dict:
         if not self.confidence_scores:
             return {"avg_confidence": 0.0, "min_confidence": 0.0,

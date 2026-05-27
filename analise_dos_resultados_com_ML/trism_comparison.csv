@@ -1,5 +1,3 @@
-,uncertainty,uncertainty,entropy,entropy,anomaly,anomaly
-,mean,std,mean,std,mean,std
-trism_enabled,,,,,,
-False,2.844068480722939e-09,3.650722142299854e-08,4.5075291709825305e-08,5.626623709595781e-07,0.023333333333333334,0.15121212222763142
-True,0.0,0.0,8.102707075741392e-43,6.931322783751813e-42,0.07666666666666666,0.26650636207348033
+trism_enabled,uncertainty,entropy,anomaly,functional_success,security_success,governance_success,score,confidence
+False,0.0,0.0,0.03,0.3133,1.0,1.0,73.1933,0.5
+True,0.0,0.0,0.07,0.2,0.6367,0.6333,28.45,0.2088

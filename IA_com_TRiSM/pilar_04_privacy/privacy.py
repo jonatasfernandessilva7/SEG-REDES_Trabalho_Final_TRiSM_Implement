@@ -1,7 +1,6 @@
 """
-Pilar 4: Proteção de Dados e Privacidade — VERSÃO FORTALECIDA
+Pilar 4: Proteção de Dados e Privacidade
 
-Melhorias frente à v1:
 - PII brasileiro completo (CPF, CNPJ, RG, CNH, PIS/PASEP, título de eleitor, CEP, telefone).
 - Validação de checksum em CPF e CNPJ para reduzir falsos positivos (Sheng et al. 2025).
 - Pseudonimização determinística (mesma PII → mesmo placeholder).
@@ -13,17 +12,15 @@ Melhorias frente à v1:
 import sys
 import re
 import hashlib
+import json
 from collections import deque
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
+from functools import lru_cache
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-
-# ============================================
-# Validadores de checksum
-# ============================================
 def _validate_cpf(cpf: str) -> bool:
     """Valida CPF pelo dígito verificador (reduz falsos positivos)."""
     digits = re.sub(r"\D", "", cpf)
@@ -36,7 +33,6 @@ def _validate_cpf(cpf: str) -> bool:
     s2 = sum(int(d) * (11 - i) for i, d in enumerate(digits[:10]))
     d2 = (s2 * 10) % 11 % 10
     return d2 == int(digits[10])
-
 
 def _validate_cnpj(cnpj: str) -> bool:
     digits = re.sub(r"\D", "", cnpj)
@@ -92,9 +88,6 @@ def _validate_titulo_eleitor(titulo: str) -> bool:
     return 1 <= state_code <= 28
 
 
-# ============================================
-# PrivacyProtector
-# ============================================
 class PrivacyProtector:
     """Pilar 4: Proteção de Dados e Privacidade."""
 
@@ -157,8 +150,17 @@ class PrivacyProtector:
 
         self.total_redactions = 0
         self.minimized_messages = 0
+        
+    _checksum_cache_cpf = {}
+    _checksum_cache_cnpj = {}
+    _checksum_cache_cnh = {}
+    _checksum_cache_titulo = {}
+    
+    def _validate_cpf_cached(self, cpf: str) -> bool:
+        if cpf not in self._checksum_cache_cpf:
+            self._checksum_cache_cpf[cpf] = _validate_cpf(cpf)
+        return self._checksum_cache_cpf[cpf]
 
-    # ------------------------------------------------------------------
     def _pseudonym(self, value: str, kind: str) -> str:
         """Gera pseudônimo determinístico (mesma PII → mesmo token)."""
         cache_key = f"{kind}:{value}"
@@ -172,38 +174,19 @@ class PrivacyProtector:
         self._pseudo_cache[cache_key] = token
         return token
 
+    @lru_cache(maxsize=512)
+    def _cached_redact_pii(self, text: str) -> Tuple[str, str]:
+        """Retorna (texto_redigido, itens_redigidos_json)."""
+        out, items = self.redact_pii(text)
+        return out, json.dumps(items)
+
     def redact_pii(self, text: str) -> Tuple[str, List[str]]:
-        """Substitui PII por placeholders (com validação para CPF/CNPJ)."""
         if not self.enabled or not self.privacy_config.get('redact_pii', True):
             return text, []
+        out, items_json = self._cached_redact_pii(text)
+        items = json.loads(items_json)
+        return out, items
 
-        redacted_items: List[str] = []
-        out = text
-
-        for kind, pattern in self.pii_patterns.items():
-            for match in pattern.findall(out):
-                value = match if isinstance(match, str) else match[0]
-                # Validação opcional
-                validator = self.VALIDATORS.get(kind)
-                if validator and not validator(value):
-                    continue
-                placeholder = (self._pseudonym(value, kind)
-                               if self.use_pseudonymization
-                               else f"[REDACTED_{kind.upper()}]")
-                out = out.replace(value, placeholder)
-                redacted_items.append(f"{kind}: {value[:6]}…")
-                self.redaction_counts[kind] = self.redaction_counts.get(kind, 0) + 1
-                self.total_redactions += 1
-
-        if redacted_items:
-            self.redaction_log.append({
-                "timestamp": datetime.now().isoformat(),
-                "items_redacted": len(redacted_items),
-                "types": sorted({i.split(":")[0] for i in redacted_items}),
-            })
-        return out, redacted_items
-
-    # ------------------------------------------------------------------
     def minimize_data(self, text: str, max_length: int = 500) -> str:
         if not self.enabled:
             return text
@@ -212,7 +195,6 @@ class PrivacyProtector:
             return text[:max_length] + "... [TRUNCADO]"
         return text
 
-    # ------------------------------------------------------------------
     def request_consent(self, session_id: str, purpose: str) -> bool:
         """Solicita ou aplica consent conforme `consent_mode`.
 
@@ -251,7 +233,6 @@ class PrivacyProtector:
         self.consent_purpose[session_id] = purpose
         return self.consent_given[session_id]
 
-    # ------------------------------------------------------------------
     def redact_from_dict(self, data: Dict, fields: List[str]) -> Dict:
         out = data.copy()
         for f in fields:

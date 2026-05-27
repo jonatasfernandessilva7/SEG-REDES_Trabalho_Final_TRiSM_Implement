@@ -1,7 +1,6 @@
 """
 core/base.py - Classes base e enums compartilhados por todos os pilares
 
-VERSÃO FORTALECIDA (v2):
 - Adicionado AuditChain: encadeamento por hash dos turns para auditoria imutável
 - ProcessingResult agora inclui evidências (decision trace) para explicabilidade
 - ModelMetadata aceita logprobs e parâmetros de quantização do Ollama

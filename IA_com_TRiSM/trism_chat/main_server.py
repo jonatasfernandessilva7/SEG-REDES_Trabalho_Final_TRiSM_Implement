@@ -48,13 +48,11 @@ from core.base import RiskLevel, AuditTurn
 # PYDANTIC MODELS
 # =========================================================================
 class MessageRequest(BaseModel):
-    """Requisição de mensagem para o chat TRiSM."""
     message: str
     session_id: Optional[str] = None
 
 
 class MessageResponse(BaseModel):
-    """Resposta da mensagem processada."""
     response: str
     blocked: bool
     session_id: str
@@ -69,7 +67,6 @@ class MessageResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
     status: str
     model: str
     model_version: str
@@ -78,7 +75,6 @@ class HealthResponse(BaseModel):
 
 
 class SessionInfo(BaseModel):
-    """Informações da sessão."""
     session_id: str
     start_time: str
     uptime_seconds: float
@@ -98,8 +94,9 @@ class TRiSMAPIServer:
         self.model_name = model_cfg.get('name', 'phi3.5')
         self.model_version = model_cfg.get('version', '1.0.0')
         self.request_logprobs = model_cfg.get('request_logprobs', True)
+        self.ollama_timeout = model_cfg.get('timeout_seconds', 600)  # timeout configurável
 
-        # Inicializa todos os 5 pilares
+        # Inicializa todos os 5 pilares (com cache interno)
         self.explainability = ExplainabilityEngine(self.config)
         self.policy_engine = PolicyEngine(self.config)
         self.metrics = MetricsCollector(self.config)
@@ -122,7 +119,6 @@ class TRiSMAPIServer:
         self._setup_middleware()
 
     def _setup_middleware(self) -> None:
-        """Configura middlewares."""
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -136,13 +132,13 @@ class TRiSMAPIServer:
 
         @self.app.get("/api/health", response_model=HealthResponse)
         def health_check():
-            """Health check do servidor e modelo."""
             try:
                 start = time.time()
                 ollama.chat(
                     model=self.model_name,
                     messages=[{"role": "user", "content": "ping"}],
-                    options={"num_predict": 5}
+                    options={"num_predict": 5},
+                    timeout=self.ollama_timeout
                 )
                 latency = (time.time() - start) * 1000
                 return HealthResponse(
@@ -152,7 +148,7 @@ class TRiSMAPIServer:
                     latency_ms=round(latency, 2),
                     model_loaded=True
                 )
-            except Exception as e:
+            except Exception:
                 return HealthResponse(
                     status="unhealthy",
                     model=self.model_name,
@@ -163,13 +159,11 @@ class TRiSMAPIServer:
 
         @self.app.post("/api/message", response_model=MessageResponse)
         def send_message(req: MessageRequest):
-            """Envia uma mensagem e processa através de todos os pilares TRiSM."""
             session_id = req.session_id or self._create_session()
             return self._process_message(session_id, req.message)
 
         @self.app.get("/api/dashboard")
         def get_dashboard():
-            """Retorna o dashboard completo."""
             return {
                 "timestamp": datetime.now().isoformat(),
                 "dashboard": self._build_dashboard(),
@@ -178,7 +172,6 @@ class TRiSMAPIServer:
 
         @self.app.get("/api/governance-report")
         def governance_report():
-            """Retorna o relatório completo de governança."""
             return {
                 "timestamp": datetime.now().isoformat(),
                 "server_uptime_seconds": (datetime.now() - self.server_start).total_seconds(),
@@ -200,12 +193,10 @@ class TRiSMAPIServer:
 
         @self.app.get("/api/metrics/prometheus")
         def metrics_prometheus():
-            """Retorna métricas em formato Prometheus."""
             return {"metrics": self.metrics.export_prometheus()}
 
         @self.app.post("/api/session/clear")
         def clear_session(session_id: str):
-            """Limpa o histórico de uma sessão."""
             if session_id in self.sessions:
                 self.sessions[session_id]["conversation_history"] = []
                 return {"status": "success", "message": f"Histórico da sessão {session_id} limpo"}
@@ -213,10 +204,8 @@ class TRiSMAPIServer:
 
         @self.app.get("/api/session/info", response_model=SessionInfo)
         def session_info(session_id: str):
-            """Retorna informações de uma sessão."""
             if session_id not in self.sessions:
                 raise HTTPException(status_code=404, detail="Sessão não encontrada")
-            
             session = self.sessions[session_id]
             return SessionInfo(
                 session_id=session_id,
@@ -228,7 +217,6 @@ class TRiSMAPIServer:
 
         @self.app.get("/api/sessions/list")
         def list_sessions():
-            """Lista todas as sessões ativas."""
             return {
                 "total_sessions": len(self.sessions),
                 "sessions": [
@@ -246,7 +234,6 @@ class TRiSMAPIServer:
     # MÉTODOS AUXILIARES
     # =====================================================================
     def _create_session(self) -> str:
-        """Cria uma nova sessão."""
         session_id = hashlib.sha256(f"{uuid.uuid4()}{time.time()}".encode()).hexdigest()
         self.sessions[session_id] = {
             "conversation_history": [],
@@ -257,13 +244,13 @@ class TRiSMAPIServer:
         return session_id
 
     def _check_health(self) -> Dict:
-        """Verifica saúde do modelo."""
         try:
             start = time.time()
             ollama.chat(
                 model=self.model_name,
                 messages=[{"role": "user", "content": "ping"}],
-                options={"num_predict": 5}
+                options={"num_predict": 5},
+                timeout=self.ollama_timeout
             )
             latency = (time.time() - start) * 1000
             return {
@@ -273,18 +260,12 @@ class TRiSMAPIServer:
                 "model_version": self.model_version
             }
         except Exception as e:
-            return {
-                "status": "unhealthy",
-                "error": str(e),
-                "model_loaded": False
-            }
+            return {"status": "unhealthy", "error": str(e), "model_loaded": False}
 
     def _estimate_token_count(self, text: str) -> int:
-        """Estima quantidade de tokens."""
         return len(text) // 4
 
     def _process_message(self, session_id: str, user_message: str) -> MessageResponse:
-        """Processa mensagem através de todos os pilares TRiSM."""
         if session_id not in self.sessions:
             session_id = self._create_session()
 
@@ -364,12 +345,12 @@ class TRiSMAPIServer:
                 confidence=0.0,
                 owasp_categories=owasp_categories
             )
-        
+
         if adv["extraction_detected"]:
             policies_triggered.append("extraction_attempt")
             owasp_categories.append("LLM07")
             risk_level = RiskLevel.max_of(risk_level, RiskLevel.MEDIUM)
-        
+
         if adv["multiturn_detected"]:
             policies_triggered.append("multiturn_buildup")
             risk_level = RiskLevel.max_of(risk_level, RiskLevel.HIGH)
@@ -426,7 +407,7 @@ class TRiSMAPIServer:
         session["conversation_history"].append({"role": "user", "content": wrapped})
 
         # ════════════════════════════════════════════════════════════════
-        # CHAMADA AO MODELO
+        # CHAMADA AO MODELO COM LOGPROBS
         # ════════════════════════════════════════════════════════════════
         try:
             api_start = time.time()
@@ -435,15 +416,19 @@ class TRiSMAPIServer:
                 "top_p": self.config.get('model', {}).get('parameters', {}).get('top_p', 0.9),
             }
             if self.request_logprobs:
-                options["logprobs"] = True
-            
+                options["logprobs"] = True  # solicita logprobs ao Ollama
+
             response = ollama.chat(
                 model=self.model_name,
                 messages=session["conversation_history"],
-                options=options
+                options=options,
+                timeout=self.ollama_timeout
             )
             latency_ms = (time.time() - api_start) * 1000
             assistant_message = response['message']['content']
+            # Extrai a lista de logprobs por token (se disponível)
+            logprobs_data = response.get('logprobs', {})
+            token_logprobs = logprobs_data.get('token_logprobs', []) if isinstance(logprobs_data, dict) else []
         except Exception as e:
             self.metrics.record_request(0, 0, 0, risk_level, success=False)
             return MessageResponse(
@@ -499,13 +484,21 @@ class TRiSMAPIServer:
             policies_triggered.append("drift_detected")
 
         # ════════════════════════════════════════════════════════════════
-        # EXPLICABILIDADE
+        # EXPLICABILIDADE com logprobs reais
         # ════════════════════════════════════════════════════════════════
-        logprobs_conf = ExplainabilityEngine.confidence_from_logprobs(response)
+        # Converte lista de logprobs em confiança média (probabilidade geométrica)
+        logprobs_conf = None
+        if token_logprobs:
+            # Filtra None e calcula média dos logprobs (valores negativos)
+            clean = [lp for lp in token_logprobs if lp is not None]
+            if clean:
+                avg_logp = sum(clean) / len(clean)
+                logprobs_conf = max(0.0, min(1.0, math.exp(avg_logp)))  # converte para [0,1]
+
         confidence = self.explainability.calculate_confidence(
             violations=violations,
             has_anomalies=bool(rep.get("violations")),
-            logprobs_confidence=logprobs_conf
+            logprobs_confidence=logprobs_conf  # passa o valor calculado
         )
         self.explainability.generate_explanation(
             action="respond",
@@ -554,7 +547,6 @@ class TRiSMAPIServer:
         )
 
     def _build_dashboard(self) -> Dict:
-        """Constrói o dashboard."""
         m = self.metrics.get_summary()
         h = self._check_health()
         priv = self.privacy.get_privacy_status()
@@ -611,16 +603,15 @@ class TRiSMAPIServer:
 
 
 def main():
-    """Função principal."""
     parser = argparse.ArgumentParser(description="TRiSM Chat v2 FastAPI Server")
     parser.add_argument("--port", type=int, default=8000, help="Porta do servidor (padrão: 8000)")
     parser.add_argument("--host", default="0.0.0.0", help="Host do servidor (padrão: 0.0.0.0)")
     args = parser.parse_args()
 
     config_path = str(Path(__file__).parent / "config.yaml")
-    
+
     try:
-        print(f"""
+        print("""
 ╔════════════════════════════════════════════════════════════════╗
 ║         🚀 TRiSM CHAT v2 — SERVIDOR FastAPI                   ║
 ║     Trust, Risk and Security Management for AI Chat           ║
@@ -633,20 +624,21 @@ def main():
 ║  P5 - Adversários (categorias, multi-turno, repetição)         ║
 ╚════════════════════════════════════════════════════════════════╝
         """)
-        
+
         server = TRiSMAPIServer(config_path)
-        
+
         print(f"📡 Iniciando servidor na porta {args.port}...")
         print(f"📚 Documentação Swagger: http://{args.host}:{args.port}/docs")
         print(f"📚 Documentação ReDoc: http://{args.host}:{args.port}/redoc")
         print()
-        
+
         run_uvicorn(server.app, host=args.host, port=args.port, log_level="info")
-    
+
     except Exception as e:
         print(f"❌ Erro ao inicializar servidor: {e}")
         sys.exit(1)
 
 
 if __name__ == "__main__":
+    import math  # necessário para exp()
     main()

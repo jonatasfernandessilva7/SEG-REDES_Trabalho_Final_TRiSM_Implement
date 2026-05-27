@@ -1,7 +1,6 @@
 """
-Pilar 3: Segurança de Aplicação (AppSec) — VERSÃO FORTALECIDA
+Pilar 3: Segurança de Aplicação (AppSec)
 
-Melhorias frente à v1:
 - Detecção de encoding tricks: Base64, Hex, Unicode invisível, ROT13 (Sebok & Wibowo 2026).
 - Output validator: detecta vazamento de PII na saída, secrets, URLs suspeitas.
 - Hierarquia de instruções com tags estruturadas (PALADIN Layer 2).
@@ -12,8 +11,10 @@ Melhorias frente à v1:
 import sys
 import re
 import codecs
+import json
 from pathlib import Path
 from typing import List, Dict, Tuple
+from functools import lru_cache
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -76,39 +77,33 @@ class SecurityLayer:
         self.encoding_attempts = 0
         self.output_violations = 0
         self.sanitized_messages = 0
+        
+    @lru_cache(maxsize=256)
+    def _cached_detect_injection(self, message: str) -> Tuple[bool, str, RiskLevel, str]:
+        """Retorna versão serializada para cache (evita objetos não hashable)."""
+        is_inj, patterns, risk, traces = self.detect_injection(message)
+        # Serializa traces como string (mas traces raramente usados no cache)
+        return is_inj, ",".join(patterns), risk, ""
 
-    # ------------------------------------------------------------------
-    # ENTRADA — detecção
-    # ------------------------------------------------------------------
     def detect_injection(self, message: str) -> Tuple[bool, List[str], RiskLevel, List[DecisionTrace]]:
-        traces: List[DecisionTrace] = []
         if not self.enabled:
-            return False, [], RiskLevel.LOW, traces
+            return False, [], RiskLevel.LOW, []
 
-        patterns_matched: List[str] = []
-        normalized = normalize_unicode(message).lower()
+        is_inj, patterns_str, risk, _ = self._cached_detect_injection(message)
+        patterns = patterns_str.split(",") if patterns_str else []
+        return is_inj, patterns, risk, []
 
-        for pattern in self.blocked_patterns:
-            if pattern.search(normalized):
-                patterns_matched.append(pattern.pattern)
-                traces.append(DecisionTrace(
-                    pillar="appsec", rule="blocked_pattern",
-                    matched=True, confidence=0.9,
-                    evidence=pattern.pattern, risk="high"))
-
-        if patterns_matched:
-            self.injection_attempts += 1
-            risk = RiskLevel.HIGH if len(patterns_matched) >= 2 else RiskLevel.MEDIUM
-            return True, patterns_matched, risk, traces
-
-        return False, [], RiskLevel.LOW, traces
+    @lru_cache(maxsize=256)
+    def _cached_detect_indirect_injection(self, message: str) -> Tuple[bool, str]:
+        found, markers = self.detect_indirect_injection(message)
+        return found, ",".join(markers)
 
     def detect_indirect_injection(self, message: str) -> Tuple[bool, List[str]]:
-        """Detecta injeção indireta: texto que tenta escalar privilégios via tags falsas."""
         if not self.enabled:
             return False, []
-        found = [marker for marker in self.indirect_injection_markers if marker.lower() in message.lower()]
-        return (len(found) > 0), found
+        found, markers_str = self._cached_detect_indirect_injection(message)
+        markers = markers_str.split(",") if markers_str else []
+        return found, markers
 
     def _detect_rot13_payload(self, text: str) -> List[str]:
         """Decodifica ROT13 e verifica se o resultado aciona padrões bloqueados.
@@ -131,46 +126,30 @@ class SecurityLayer:
         except Exception:
             return []
 
+    @lru_cache(maxsize=256)
+    def _cached_detect_encoding_tricks(self, message: str) -> Tuple[bool, str]:
+        found, details = self.detect_encoding_tricks(message)
+        return found, json.dumps(details)
+    
     def detect_encoding_tricks(self, message: str) -> Tuple[bool, Dict[str, List[str]]]:
-        """Detecta payloads codificados (Base64/Hex/ROT13) e Unicode invisível."""
         if not self.enabled:
             return False, {}
-        details: Dict[str, List[str]] = {}
-        b64 = detect_base64_payload(message)
-        hexp = detect_hex_payload(message)
-        invisibles = detect_invisible_chars(message)
-        rot13_hits = self._detect_rot13_payload(message)
-        if b64:
-            details["base64"] = b64
-        if hexp:
-            details["hex"] = hexp
-        if invisibles:
-            details["unicode_invisible"] = [hex(ord(c)) for c in invisibles]
-        if rot13_hits:
-            details["rot13"] = rot13_hits
-        if details:
-            self.encoding_attempts += 1
-            return True, details
-        return False, {}
+        found, details_json = self._cached_detect_encoding_tricks(message)
+        details = json.loads(details_json) if details_json else {}
+        return found, details
+
+    @lru_cache(maxsize=256)
+    def _cached_detect_toxicity(self, message: str) -> Tuple[bool, str, str]:
+        is_tox, terms, risk = self.detect_toxicity(message)
+        return is_tox, ",".join(terms), risk.value
 
     def detect_toxicity(self, message: str) -> Tuple[bool, List[str], RiskLevel]:
         if not self.enabled:
             return False, [], RiskLevel.LOW
-        msg_lower = message.lower()
-        # Word boundary evita que "skill" dispare "kill" ou "bombard" dispare "bomb"
-        toxic_found = [
-            t for t in self.toxic_terms
-            if re.search(r'\b' + re.escape(t.lower()) + r'\b', msg_lower)
-        ]
-        if toxic_found:
-            self.toxicity_alerts += 1
-            risk = RiskLevel.HIGH if len(toxic_found) >= 3 else RiskLevel.MEDIUM
-            return True, toxic_found, risk
-        return False, [], RiskLevel.LOW
+        is_tox, terms_str, risk_val = self._cached_detect_toxicity(message)
+        terms = terms_str.split(",") if terms_str else []
+        return is_tox, terms, RiskLevel(risk_val)
 
-    # ------------------------------------------------------------------
-    # SAÍDA — validação (PALADIN Layer 5)
-    # ------------------------------------------------------------------
     def validate_output(self, response: str) -> Tuple[bool, List[Dict]]:
         """Detecta vazamentos perigosos na saída do modelo."""
         if not self.enabled or not self.appsec_config.get('output_validation', True):
@@ -190,9 +169,6 @@ class SecurityLayer:
             self.output_violations += 1
         return (len(violations) == 0), violations
 
-    # ------------------------------------------------------------------
-    # SANITIZAÇÃO
-    # ------------------------------------------------------------------
     def sanitize_input(self, message: str) -> str:
         if not self.appsec_config.get('sanitize_input', True):
             return message
@@ -214,9 +190,6 @@ class SecurityLayer:
                 sanitized = pattern.sub(f"[REDACTED_{kind.upper()}]", sanitized)
         return sanitized
 
-    # ------------------------------------------------------------------
-    # HIERARQUIA DE PROMPT (PALADIN Layer 2)
-    # ------------------------------------------------------------------
     def wrap_user_input(self, message: str) -> str:
         """Encapsula entrada do usuário em estrutura hierárquica para o modelo entender níveis.
 
@@ -230,7 +203,6 @@ class SecurityLayer:
             "</user_input>"
         )
 
-    # ------------------------------------------------------------------
     def validate_message(self, message: str) -> Dict:
         result = {
             "is_valid": True,
@@ -278,7 +250,6 @@ class SecurityLayer:
 
         return result
 
-    # ------------------------------------------------------------------
     def get_status(self) -> Dict:
         return {
             "enabled": self.enabled,

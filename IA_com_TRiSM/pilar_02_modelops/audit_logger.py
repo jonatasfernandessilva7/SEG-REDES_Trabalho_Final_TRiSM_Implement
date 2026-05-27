@@ -1,7 +1,6 @@
 """
-Pilar 2: ModelOps - Logs Imutáveis para Auditoria — VERSÃO FORTALECIDA
+Pilar 2: ModelOps - Logs Imutáveis para Auditoria
 
-Melhorias frente à v1:
 - Hash chain (SHA-256 encadeado) garantindo detecção de adulteração retroativa.
 - Verificação de integridade da cadeia em tempo real.
 - Cifragem opcional do log com Fernet (AES-128) — atende LGPD/GDPR.
@@ -45,7 +44,6 @@ class AuditLogger:
 
         self._cleanup_old_logs()
 
-    # ------------------------------------------------------------------
     def _init_fernet(self, log_cfg: Dict) -> None:
         try:
             from cryptography.fernet import Fernet  # type: ignore
@@ -66,7 +64,6 @@ class AuditLogger:
                 print(f"[Audit] Chave Fernet gerada em {key_path}")
         self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
 
-    # ------------------------------------------------------------------
     def _read_last_hash(self) -> str:
         """Recupera o último self_hash registrado para encadear nova execução."""
         if not self.log_file.exists():
@@ -110,7 +107,6 @@ class AuditLogger:
                 return line
         return line
 
-    # ------------------------------------------------------------------
     def _rotate_log(self, reason: str) -> None:
         """Arquiva o log ativo e reinicia a cadeia — preserva a integridade do hash chain."""
         archive = self.log_file.with_suffix(
@@ -155,7 +151,6 @@ class AuditLogger:
         except Exception as e:
             print(f"[Audit] Erro na rotação de logs: {e}")
 
-    # ------------------------------------------------------------------
     def log_turn(self, turn: AuditTurn) -> None:
         """Registra turno com hash chain. Atualiza self.last_hash."""
         payload = asdict(turn)
@@ -171,7 +166,6 @@ class AuditLogger:
             f.write(encrypted + "\n")
         self._last_hash = h
 
-    # ------------------------------------------------------------------
     def get_recent_logs(self, limit: int = 100) -> List[Dict]:
         logs: List[Dict] = []
         if not self.log_file.exists():
@@ -199,7 +193,6 @@ class AuditLogger:
         return [log for log in self.get_recent_logs(limit)
                 if category in (log.get('owasp_categories') or [])]
 
-    # ------------------------------------------------------------------
     def verify_integrity(self) -> Dict:
         """Verifica a hash chain do arquivo de auditoria."""
         if not self.log_file.exists():
@@ -223,7 +216,6 @@ class AuditLogger:
         valid, total, invalid = verify_chain(str(self.log_file))
         return {"valid": valid, "total": total, "invalid_indices": invalid}
 
-    # ------------------------------------------------------------------
     def get_status(self) -> Dict:
         size_mb = (self.log_file.stat().st_size / (1024 * 1024)) if self.log_file.exists() else 0
         return {

@@ -21,10 +21,7 @@ import unicodedata
 from collections import Counter
 from typing import Dict, List, Optional, Sequence, Tuple
 
-
-# ============================================
 # DRIFT — PSI e Jensen-Shannon
-# ============================================
 def population_stability_index(expected: Sequence[float],
                                 observed: Sequence[float],
                                 eps: float = 1e-6) -> float:
@@ -88,10 +85,7 @@ def length_distribution(messages: List[Dict], bins: int = 10,
     total = sum(counts)
     return [c / total for c in counts] if total else counts
 
-
-# ============================================
 # HASH CHAIN para audit log imutável
-# ============================================
 def turn_hash(turn_payload: Dict, prev_hash: str = "") -> str:
     """Calcula hash SHA-256 de um turno encadeando o hash anterior.
 
@@ -135,10 +129,7 @@ def verify_chain(jsonl_path: str) -> Tuple[bool, int, List[int]]:
         return True, 0, []
     return (len(invalid) == 0), total, invalid
 
-
-# ============================================
 # DETECÇÃO DE CODIFICAÇÃO (Base64 / Hex / ROT13 / Unicode)
-# ============================================
 _BASE64_RE = re.compile(r"(?:[A-Za-z0-9+/]{4}){5,}(?:[A-Za-z0-9+/]{2}={2}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})")
 _HEX_RE = re.compile(r"\b(?:0x)?[0-9a-fA-F]{20,}\b")
 _INVISIBLE_CHARS = {
@@ -205,10 +196,7 @@ def normalize_unicode(text: str) -> str:
     cleaned = "".join(c for c in text if c not in _INVISIBLE_CHARS)
     return unicodedata.normalize("NFKC", cleaned)
 
-
-# ============================================
 # SIMILARIDADE — para detecção de repetição semântica
-# ============================================
 def jaccard_similarity(a: str, b: str, *, ngram: int = 3) -> float:
     """Similaridade de Jaccard entre conjuntos de n-gramas (caractere)."""
     if not a or not b:
@@ -246,10 +234,7 @@ def normalized_levenshtein(a: str, b: str) -> float:
     dist = prev[-1]
     return 1.0 - dist / max(la, lb)
 
-
-# ============================================
 # MÉTRICAS DE SEGURANÇA — ASR/DSR/ISR/POF/PSR/CCS/TIVS
-# ============================================
 def attack_success_rate(blocked: int, total: int) -> float:
     """ASR = ataques bem sucedidos / total. Em ambientes defensivos, equivale a (total - blocked)/total."""
     if total <= 0:

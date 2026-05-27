@@ -1,7 +1,6 @@
 """
-Pilar 5: Resistência a Ataques Adversários — VERSÃO FORTALECIDA
+Pilar 5: Resistência a Ataques Adversários
 
-Melhorias frente à v1:
 - Jailbreak categorizado (DAN, role-play, "ignore instructions", developer mode, encoded).
 - Padrões precisos para reduzir falsos positivos (era `.*jailbreak.*`).
 - Detecção de repetição semântica (Jaccard + Levenshtein) — não só comparação exata.
@@ -17,16 +16,13 @@ from pathlib import Path
 from collections import deque
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
+from functools import lru_cache
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from core.base import RiskLevel
 from core.metrics_lib import jaccard_similarity, normalized_levenshtein
 
-
-# ============================================
-# Categorias de jailbreak com padrões precisos
-# ============================================
 JAILBREAK_CATEGORIES: Dict[str, List[str]] = {
     "instruction_override": [
         r"ignore\s+(?:all\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|prompts?)",
@@ -36,7 +32,7 @@ JAILBREAK_CATEGORIES: Dict[str, List[str]] = {
         r"ignor[ea]\s+(?:todas\s+)?(?:as\s+)?(?:instru[çc][õo]es|regras)\s+anteriores",
     ],
     "persona_takeover": [
-        r"\bDAN\b",                           # Do-Anything-Now
+        r"\bDAN\b",                          
         r"do\s+anything\s+now",
         r"developer\s+mode\s+enabled",
         r"jailbroken\s+mode",
@@ -82,11 +78,11 @@ class AdversarialDetector:
         self.recent_user_messages: deque = deque(
             maxlen=self.adversarial_config.get('multiturn_window', 6))
 
-        # Compila padrões categorizados (default + extras do config)
+        # Compila padrões categorizados
         self.category_patterns: Dict[str, List[re.Pattern]] = {}
         self._compile_categories()
 
-        # Lista plana legacy do config — incorporada como custom
+        # Lista plana legacy do config 
         custom_patterns = self.adversarial_config.get('jailbreak_patterns', [])
         if custom_patterns:
             self.category_patterns.setdefault("custom", [])
@@ -96,7 +92,7 @@ class AdversarialDetector:
                 except re.error:
                     pass
 
-        # Palavras-chave para extração (mais precisas)
+        # Palavras-chave para extração
         self.extraction_keywords = [
             "system prompt", "system instructions", "initial prompt", "original instructions",
             "your guidelines", "your rules", "your programming",
@@ -114,7 +110,6 @@ class AdversarialDetector:
         self.repetition_attacks = 0
         self.multiturn_alerts = 0
 
-    # ------------------------------------------------------------------
     def _compile_categories(self) -> None:
         for category, patterns in JAILBREAK_CATEGORIES.items():
             self.category_patterns[category] = []
@@ -124,11 +119,16 @@ class AdversarialDetector:
                 except re.error:
                     pass
 
-    # ------------------------------------------------------------------
+    @lru_cache(maxsize=256)
+    def _cached_match_categories(self, message: str) -> str:
+        """Retorna JSON com as categorias correspondentes."""
+        matches = self._match_categories(message)
+        return json.dumps(matches)
+
     def _match_categories(self, message: str) -> Dict[str, List[str]]:
-        """Puro: retorna categorias correspondentes sem efeitos colaterais."""
+        """Puro: retorna categorias correspondentes (sem cache, usado internamente)."""
         msg = message.lower()
-        matches: Dict[str, List[str]] = {}
+        matches = {}
         for category, patterns in self.category_patterns.items():
             hits = [p.pattern for p in patterns if p.search(msg)]
             if hits:
@@ -136,15 +136,12 @@ class AdversarialDetector:
         return matches
 
     def detect_jailbreak(self, message: str) -> Tuple[bool, float, Dict[str, List[str]]]:
-        """Retorna (detectado, confidence, mapping categoria→padrões)."""
         if not self.enabled:
             return False, 0.0, {}
-
-        matches = self._match_categories(message)
+        matches_json = self._cached_match_categories(message)
+        matches = json.loads(matches_json)
         if not matches:
             return False, 0.0, {}
-
-        # Confidence aumenta com número de categorias (não só de padrões)
         confidence = min(1.0, 0.4 + 0.20 * len(matches) + 0.10 * sum(len(h) for h in matches.values()))
         self.jailbreak_attempts += 1
         self.suspicious_activities.append({
@@ -156,7 +153,6 @@ class AdversarialDetector:
         })
         return True, confidence, matches
 
-    # ------------------------------------------------------------------
     def detect_repetition_attack(self, new_response: str) -> Tuple[bool, float, str]:
         """Detecta repetição exata, alta similaridade Jaccard ou Levenshtein."""
         if not self.enabled or len(self.recent_responses) < 3:
@@ -203,7 +199,11 @@ class AdversarialDetector:
 
         return False, max(max_jaccard, max_lev), "below_threshold"
 
-    # ------------------------------------------------------------------
+    @lru_cache(maxsize=256)
+    def _cached_detect_extraction_attempt(self, message: str) -> Tuple[bool, str]:
+        found, hits = self.detect_extraction_attempt(message)
+        return found, ",".join(hits)
+
     def detect_extraction_attempt(self, message: str) -> Tuple[bool, List[str]]:
         if not self.enabled:
             return False, []
@@ -221,11 +221,11 @@ class AdversarialDetector:
             return True, hits
         return False, []
 
-    # ------------------------------------------------------------------
     def detect_multiturn_buildup(self, current_message: str) -> Tuple[bool, str]:
-        """Detecta padrões multi-turno onde a soma das mensagens é maliciosa.
+        """
+        Detecta padrões multi-turno onde a soma das mensagens é maliciosa.
 
-        Heurística simples: se nas N últimas mensagens existem duas ou mais
+        Heurística: se nas N últimas mensagens existem duas ou mais
         categorias de jailbreak fragmentadas em mensagens diferentes,
         sinaliza buildup.
         """
@@ -238,7 +238,7 @@ class AdversarialDetector:
 
         accumulated_categories = set()
         for msg in self.recent_user_messages:
-            # Usa _match_categories (puro) para evitar incrementar contadores
+            # Usa _match_categories para evitar incrementar contadores
             # de mensagens já auditadas em turnos anteriores.
             accumulated_categories.update(self._match_categories(msg).keys())
 
@@ -253,7 +253,6 @@ class AdversarialDetector:
             return True, ", ".join(sorted(accumulated_categories))
         return False, ""
 
-    # ------------------------------------------------------------------
     def validate_message(self, message: str) -> Dict:
         result = {
             "is_valid": True,
@@ -293,7 +292,6 @@ class AdversarialDetector:
 
         return result
 
-    # ------------------------------------------------------------------
     def validate_response(self, response: str) -> Dict:
         result = {
             "is_valid": True,
@@ -308,7 +306,6 @@ class AdversarialDetector:
             result["violations"].append(f"repetition[{kind}] (conf={conf:.0%})")
         return result
 
-    # ------------------------------------------------------------------
     def get_suspicious_count(self) -> int:
         return len(self.suspicious_activities)
 

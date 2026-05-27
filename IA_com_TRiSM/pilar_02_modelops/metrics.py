@@ -1,7 +1,6 @@
 """
-Pilar 2: ModelOps - Métricas e Observabilidade — VERSÃO FORTALECIDA
+Pilar 2: ModelOps - Métricas e Observabilidade
 
-Melhorias frente à v1:
 - Drift via PSI e Jensen-Shannon Divergence (Ray 2026), não mais apenas média de comprimento.
 - Baseline atualizável dinamicamente com janela móvel.
 - Métricas exportáveis em formato Prometheus.
@@ -60,7 +59,6 @@ class MetricsCollector:
         self.cost_per_1k_input = self.monitoring_config.get('cost_per_1k_input_tokens', 0.0)
         self.cost_per_1k_output = self.monitoring_config.get('cost_per_1k_output_tokens', 0.0)
 
-    # ------------------------------------------------------------------
     def record_request(self, latency_ms: float, input_tokens: int, output_tokens: int,
                        risk_level: RiskLevel, success: bool = True) -> None:
         with self._lock:
@@ -84,9 +82,6 @@ class MetricsCollector:
                 self.last_minute_token_count = 0
                 self.last_minute_check = now
 
-    # ------------------------------------------------------------------
-    # Drift estatístico — PSI + JS
-    # ------------------------------------------------------------------
     def calculate_drift(self, current_messages: List[Dict],
                         bins: int = 10, max_len: int = 1000) -> Dict[str, float]:
         """Calcula drift por PSI e JS divergence sobre comprimento das mensagens.
@@ -128,9 +123,6 @@ class MetricsCollector:
         return {"psi": round(psi, 4), "js": round(js, 4),
                 "score": round(max(psi, js), 4)}
 
-    # ------------------------------------------------------------------
-    # Percentis de latência
-    # ------------------------------------------------------------------
     def latency_percentiles(self) -> Dict[str, float]:
         with self._lock:
             samples = sorted(self.metrics["response_times"])
@@ -145,7 +137,6 @@ class MetricsCollector:
                 "p95": round(pct(95), 2),
                 "p99": round(pct(99), 2)}
 
-    # ------------------------------------------------------------------
     def estimated_cost_usd(self) -> float:
         """Estimativa de custo em USD (LLM10 — Unbounded Consumption)."""
         with self._lock:
@@ -154,7 +145,6 @@ class MetricsCollector:
         return round((it / 1000.0) * self.cost_per_1k_input
                      + (ot / 1000.0) * self.cost_per_1k_output, 4)
 
-    # ------------------------------------------------------------------
     def get_summary(self) -> Dict:
         with self._lock:
             total_requests = self.metrics["total_requests"]
@@ -194,7 +184,6 @@ class MetricsCollector:
             "error_count": self.metrics["total_errors"],
         }
 
-    # ------------------------------------------------------------------
     def check_alerts(self) -> List[Dict]:
         alerts: List[Dict] = []
         summary = self.get_summary()
@@ -242,7 +231,6 @@ class MetricsCollector:
 
         return alerts
 
-    # ------------------------------------------------------------------
     def export_prometheus(self) -> str:
         """Exporta métricas em formato exposition Prometheus."""
         s = self.get_summary()

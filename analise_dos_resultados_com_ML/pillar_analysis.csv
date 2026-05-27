@@ -1,0 +1,11 @@
+pillar,trism_enabled,score,confidence,functional_success,security_success,governance_success,blocked_int,uncertainty,entropy
+P1_Explicabilidade,False,74.65,0.5,0.3333,1.0,1.0,0.0,0.0,0.0
+P1_Explicabilidade,True,34.9833,0.2833,0.2833,0.6667,0.65,0.3333,0.0,0.0
+P2_ModelOps,False,73.5167,0.5,0.3333,1.0,1.0,0.0,0.0,0.0
+P2_ModelOps,True,53.6167,0.5,0.45,0.6667,0.6667,0.3333,0.0,0.0
+P3_AppSec,False,73.0667,0.5,0.3167,1.0,1.0,0.0,0.0,0.0
+P3_AppSec,True,21.3833,0.1108,0.1167,0.55,0.55,0.4167,0.0,0.0
+P4_Privacidade,False,72.5167,0.5,0.3,1.0,1.0,0.0,0.0,0.0
+P4_Privacidade,True,14.9167,0.0667,0.0667,0.6667,0.6667,0.3333,0.0,0.0
+P5_Adversarial,False,72.2167,0.5,0.2833,1.0,1.0,0.0,0.0,0.0
+P5_Adversarial,True,17.35,0.0833,0.0833,0.6333,0.6333,0.3667,0.0,0.0

@@ -28,7 +28,10 @@ class OllamaBatchEvaluator:
         payload = {
             "model": MODEL_NAME,
             "prompt": prompt,
-            "stream": False
+            "stream": False,
+            "options": {
+                "logprobs": True,
+            }
         }
 
         start_time = time.time()
@@ -36,32 +39,32 @@ class OllamaBatchEvaluator:
         try:
             response = requests.post(
                 OLLAMA_API_URL,
-                json=payload
+                json=payload,
+                timeout=1200  # 20 minutos
             )
 
             data = response.json()
+            logprobs_data = data.get("logprobs", {})
+            token_logprobs = logprobs_data.get("token_logprobs", [])
 
             time.sleep(0.1)
-
-            result_text = data.get("response", "")
-
+            result_text = data.get("response", "")     
             metadata = {
-                "blocked": False,
-                "risk_level": "unknown",
-                "policies_triggered": [],
-                "violations": [],
-                "confidence": 0.5,
-                "owasp_categories": [],
-                "input_tokens": data.get("prompt_eval_count", 0),
-                "output_tokens": data.get("eval_count", 0),
+                        "blocked": data.get("blocked", False),
+                        "risk_level": data.get("risk_level", "unknown"),
+                        "policies_triggered": data.get("policies_triggered", []),
+                        "violations": data.get("violations", []),
+                        "confidence": data.get("confidence", 0),
+                        "owasp_categories": data.get("owasp_categories", []),
+                        "input_tokens": data.get("input_tokens", 0),
+                        "output_tokens": data.get("output_tokens", 0),
+                        "logprobs": token_logprobs,  
             }
-
             latency = time.time() - start_time
 
             return result_text, latency, metadata
 
         except Exception as e:
-
             latency = time.time() - start_time
 
             return str(e), latency, {}

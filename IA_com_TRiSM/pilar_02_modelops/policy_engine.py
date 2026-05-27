@@ -1,7 +1,6 @@
 """
-Pilar 2: ModelOps - Políticas como Código — VERSÃO FORTALECIDA
+Pilar 2: ModelOps - Políticas como Código
 
-Melhorias frente à v1:
 - Rate limit por usuário/IP/sessão (3 dimensões), com política configurável.
 - Token-budget (LLM10 — Unbounded Consumption) por sessão/janela.
 - Sliding-window thread-safe.
@@ -15,6 +14,7 @@ from collections import deque
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple, Callable, Optional
+from collections import deque
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -35,15 +35,13 @@ class PolicyEngine:
         self.custom_policies: Dict[str, Callable] = {}
 
         # Históricos por chave (sessão, usuário, ip)
-        self.request_history: Dict[str, List[float]] = {}
-        self.token_history: Dict[str, List[Tuple[float, int]]] = {}
+        self.request_history: Dict[str, deque] = {}
+        self.token_history: Dict[str, deque] = {}
         self._lock = threading.Lock()
 
-    # ------------------------------------------------------------------
     def check_rate_limit(self, session_id: str,
-                          user_id: Optional[str] = None,
-                          ip_address: Optional[str] = None) -> Tuple[bool, Dict]:
-        """Verifica rate-limit em três dimensões: sessão, usuário e IP."""
+                         user_id: Optional[str] = None,
+                         ip_address: Optional[str] = None) -> Tuple[bool, Dict]:
         if not self.rate_limit_config.get('enabled', True):
             return True, {}
 
@@ -62,8 +60,12 @@ class PolicyEngine:
 
             statuses: Dict[str, Dict] = {}
             for key, limit in keys:
-                hist = self.request_history.setdefault(key, [])
-                hist[:] = [t for t in hist if now - t < window]
+                # Cria deque com maxlen = limit para nunca exceder o tamanho
+                hist = self.request_history.setdefault(key, deque(maxlen=limit))
+                # Remove entradas antigas (deque não faz isso automaticamente por tempo)
+                # Podemos varrer, mas como maxlen é limit, o número de itens é pequeno
+                while hist and (now - hist[0]) > window:
+                    hist.popleft()
                 allowed_here = len(hist) < limit
                 if allowed_here:
                     hist.append(now)
@@ -79,9 +81,7 @@ class PolicyEngine:
             self._log_policy("rate_limit", session_id, allowed, statuses)
             return allowed, statuses
 
-    # ------------------------------------------------------------------
     def consume_tokens(self, session_id: str, tokens: int) -> Tuple[bool, Dict]:
-        """Política para LLM10 (Unbounded Consumption)."""
         if not self.token_budget_config.get('enabled', False):
             return True, {}
 
@@ -90,8 +90,10 @@ class PolicyEngine:
             window = self.token_budget_config.get('window_seconds', 60)
             budget = self.token_budget_config.get('tokens_per_window', 50000)
 
-            hist = self.token_history.setdefault(session_id, [])
-            hist[:] = [(t, n) for t, n in hist if now - t < window]
+            hist = self.token_history.setdefault(session_id, deque(maxlen=budget))
+            # Remove entradas antigas
+            while hist and (now - hist[0][0]) > window:
+                hist.popleft()
             used = sum(n for _, n in hist)
 
             allowed = (used + tokens) <= budget
@@ -107,7 +109,6 @@ class PolicyEngine:
             self._log_policy("token_budget", session_id, allowed, status)
             return allowed, status
 
-    # ------------------------------------------------------------------
     def _log_policy(self, name: str, session_id: str, allowed: bool, details: Dict) -> None:
         self.policies_log.append({
             "timestamp": datetime.now().isoformat(),
@@ -155,7 +156,6 @@ class PolicyEngine:
 
         return result
 
-    # ------------------------------------------------------------------
     def get_policy_logs(self, limit: int = 100) -> List[Dict]:
         return list(self.policies_log)[-limit:]
 
