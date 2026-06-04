@@ -258,3 +258,4 @@ class PrivacyProtector:
             "pseudo_cache_size": len(self._pseudo_cache),
             "pseudo_cache_maxsize": self._pseudo_cache_maxsize,
         }
+        

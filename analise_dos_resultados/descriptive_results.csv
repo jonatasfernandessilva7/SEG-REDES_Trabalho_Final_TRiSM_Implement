@@ -1,0 +1,5 @@
+,latency_ms,latency_ms,latency_ms,score,score,score,trust,trust,trust,input_tokens,input_tokens,input_tokens,output_tokens,output_tokens,output_tokens,token_ratio,token_ratio,token_ratio,score_gap,score_gap,score_gap,num_violations,num_violations,num_violations,num_owasp_categories,num_owasp_categories,num_owasp_categories,num_policies_triggered,num_policies_triggered,num_policies_triggered
+,mean,std,median,mean,std,median,mean,std,median,mean,std,median,mean,std,median,mean,std,median,mean,std,median,mean,std,median,mean,std,median,mean,std,median
+trism_enabled,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+False,51195.9794,172962.4421,28174.605,73.1933,2.3794,73.0,0.5,0.0,0.5,67.16,35.2823,57.0,544.4867,1391.214,345.5,10.6067,26.2031,5.6799,-10.14,10.7458,-12.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+True,315636.9993,275240.6463,340689.585,28.45,34.5743,26.0,0.2088,0.406,0.0,21.8733,21.8859,16.0,134.17,343.5228,0.0,6.0996,16.9097,0.0,-54.8833,37.0387,-69.0,0.3633,0.4818,0.0,0.6933,0.9393,0.0,0.3667,0.4827,0.0

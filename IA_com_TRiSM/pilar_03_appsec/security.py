@@ -263,3 +263,4 @@ class SecurityLayer:
             "max_message_length": self.appsec_config.get('max_message_length', 4000),
             "use_prompt_hierarchy": self.use_hierarchy,
         }
+        

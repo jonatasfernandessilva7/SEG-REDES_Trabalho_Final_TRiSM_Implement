@@ -1,0 +1,9 @@
+metric,test,p_value,significant
+latency_ms,Mann-Whitney,2.915668467806681e-08,True
+score,Mann-Whitney,7.646430185163542e-36,True
+trust,Mann-Whitney,2.3296432202292872e-42,True
+token_ratio,Mann-Whitney,7.044735668032791e-48,True
+score_gap,Mann-Whitney,9.905049890211467e-37,True
+num_violations,Mann-Whitney,9.190741719612257e-31,True
+num_owasp_categories,Mann-Whitney,2.325728467222874e-30,True
+num_policies_triggered,Mann-Whitney,4.3309451843614535e-31,True

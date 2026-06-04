@@ -328,3 +328,4 @@ class AdversarialDetector:
                 "block_threshold": self.adversarial_config.get('block_threshold', 0.5),
             },
         }
+        
