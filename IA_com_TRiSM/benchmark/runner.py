@@ -1,13 +1,3 @@
-"""
-benchmark/runner.py — executa os 3 experimentos previstos no artigo.
-
-Experimento E1: Eficácia de detecção (TRiSM Chat vs Ollama puro) sobre 100 prompts OWASP.
-Experimento E2: KPIs compostas (ISR/POF/PSR/CCS/TIVS) sobre o subset LLM01.
-Experimento E3: Trade-off segurança × eficiência sobre 20 prompts benignos.
-
-Saídas: results/<timestamp>/{e1.csv, e1.md, e1.json, e2.json, e3.json, baseline.csv}.
-"""
-
 from __future__ import annotations
 import json
 import time

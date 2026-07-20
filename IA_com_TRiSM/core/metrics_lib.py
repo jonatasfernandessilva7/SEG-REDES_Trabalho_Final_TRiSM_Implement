@@ -1,16 +1,3 @@
-"""
-core/metrics_lib.py - Biblioteca central de métricas estatísticas e de segurança.
-
-NOVO neste v2. Implementa funções referenciadas pela literatura:
-- PSI (Population Stability Index) - Ray (2026)
-- Jensen-Shannon Divergence - Ray (2026)
-- ASR / DSR - Wei et al. (2026)
-- ISR / POF / PSR / CCS / TIVS - Gosmar et al. (2025)
-- Hash chaining para audit logs imutáveis - PALADIN Layer 4 / NIST AI 600-1
-- Detector de codificação (Base64, Hex, ROT13) - Sebok & Wibowo (2026)
-- Similaridade de Jaccard / Levenshtein para repetição semântica
-"""
-
 from __future__ import annotations
 import base64
 import hashlib

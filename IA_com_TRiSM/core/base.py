@@ -1,11 +1,3 @@
-"""
-core/base.py - Classes base e enums compartilhados por todos os pilares
-
-- Adicionado AuditChain: encadeamento por hash dos turns para auditoria imutável
-- ProcessingResult agora inclui evidências (decision trace) para explicabilidade
-- ModelMetadata aceita logprobs e parâmetros de quantização do Ollama
-"""
-
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional

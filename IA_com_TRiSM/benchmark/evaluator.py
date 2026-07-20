@@ -1,15 +1,3 @@
-"""
-benchmark/evaluator.py — calculadora de métricas de segurança para o estudo de caso.
-
-Implementa:
-- ASR / DSR (Wei et al. 2026)
-- ISR / POF / PSR / CCS / TIVS (Gosmar et al. 2025)
-- Detection Rate por categoria OWASP (Shahin & Alsmadi 2026)
-- FPR sobre prompts benignos (preservação de usabilidade)
-- Latência média / p95 / p99
-- Geração de relatório em Markdown e CSV
-"""
-
 from __future__ import annotations
 import csv
 import json

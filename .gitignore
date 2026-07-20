@@ -209,3 +209,22 @@ __marimo__/
 
 # unnecessary files
 audit_log.jsonl
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.env
+.venv
+venv/
+*.log
+*.jsonl
+*.key
+benchmark/results/
+audit_log.*
+benchmark_*.*
+trism_*.json
