@@ -139,12 +139,49 @@ def success_analysis(df):
     summary.to_csv(
         "success_metrics.csv"
     )
-
+    
     return summary
+
+# effect size (Cliff's delta)
+def cliffs_delta(x, y):
+    x = np.asarray(x)
+    y = np.asarray(y)
+    gt = 0
+    lt = 0
+    
+    for xv in x:
+        gt += np.sum(xv > y)
+        lt += np.sum(xv < y)
+        
+    return (gt - lt) / (len(x) * len(y))
+
+def cliffs_magnitude(delta):
+    ad = abs(delta)
+    
+    if ad < 0.147:
+        return "negligible"
+    elif ad < 0.33:
+        return "small"
+    elif ad < 0.474:
+        return "medium"
+    else:
+        return "large"
+
+# 95% bootstrap confidence interval for the mean
+def bootstrap_ci_mean(x, n_boot=10000, seed=42):
+    rng = np.random.default_rng(seed)
+    x = np.asarray(x, dtype=float)
+    
+    boots = rng.choice(
+        x, size=(n_boot, len(x)), replace=True
+    ).mean(axis=1)
+    
+    lo, hi = np.percentile(boots, [2.5, 97.5])
+    
+    return lo, hi
 
 # Hypothesis testing
 def hypothesis_test(df):
-
     metrics = [
         "latency_ms",
         "score",
@@ -163,17 +200,35 @@ def hypothesis_test(df):
 
     for metric in metrics:
 
+        off_vals = off[metric].values
+        on_vals  = on[metric].values
+
         stat, p = mannwhitneyu(
-            off[metric],
-            on[metric],
+            off_vals,
+            on_vals,
             alternative="two-sided"
         )
+
+        delta = cliffs_delta(off_vals, on_vals)
+        magnitude = cliffs_magnitude(delta)
+
+        off_ci_lo, off_ci_hi = bootstrap_ci_mean(off_vals)
+        on_ci_lo, on_ci_hi = bootstrap_ci_mean(on_vals)
 
         results.append({
             "metric": metric,
             "test": "Mann-Whitney",
+            "off_mean": off_vals.mean(),
+            "off_ci_low": off_ci_lo,
+            "off_ci_high": off_ci_hi,
+            "on_mean": on_vals.mean(),
+            "on_ci_low": on_ci_lo,
+            "on_ci_high": on_ci_hi,
+            "U": stat,
             "p_value": p,
-            "significant": p < 0.05
+            "significant": p < 0.05,
+            "cliffs_delta": delta,
+            "effect_size": magnitude
         })
 
     results = pd.DataFrame(results)
@@ -185,8 +240,7 @@ def hypothesis_test(df):
         index=False
     )
 
-    return results
-    
+    return results    
 # statistical evaluation
 def run_hypothesis_tests(df):
 
