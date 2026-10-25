@@ -1,21 +1,55 @@
 """utils/config_loader.py — carrega configuração YAML com defaults v2."""
 
 import sys
-import yaml
 from pathlib import Path
 from typing import Dict, Any
+
+try:
+    import yaml
+except ImportError as exc:  # pragma: no cover - depende do ambiente
+    raise RuntimeError(
+        "Dependência ausente: PyYAML. Execute 'pip install -r requirements.txt'."
+    ) from exc
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 
+def _resolve_config_path(config_path: str) -> Path:
+    """Resolve caminhos relativos em relação ao diretório do projeto e da pasta do chat."""
+    if not config_path:
+        config_path = "config.yaml"
+
+    input_path = Path(config_path)
+    candidates = []
+
+    if input_path.is_absolute():
+        candidates.append(input_path)
+    else:
+        repo_root = Path(__file__).resolve().parent.parent
+        candidates.extend([
+            Path.cwd() / input_path,
+            repo_root / input_path,
+            repo_root / "trism_chat" / input_path,
+        ])
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    # Fallback para o config padrão do projeto para evitar falha silenciosa
+    default_path = repo_root / "trism_chat" / "config.yaml"
+    return default_path if default_path.exists() else input_path
+
+
 def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
+    resolved = _resolve_config_path(config_path)
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(resolved, 'r', encoding='utf-8') as f:
             cfg = yaml.safe_load(f) or {}
             # mescla com defaults para garantir chaves novas em configs antigas
             return _merge(get_default_config(), cfg)
     except FileNotFoundError:
-        print(f"[Config] Arquivo {config_path} não encontrado, usando defaults v2")
+        print(f"[Config] Arquivo {resolved} não encontrado, usando defaults v2")
         return get_default_config()
     except yaml.YAMLError as e:
         print(f"[Config] Erro ao parsear YAML: {e}")
