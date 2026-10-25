@@ -147,23 +147,26 @@ ollama serve
 ollama pull phi3.5
 ```
 
-4. Execute o sistema:
+4. Execute o sistema a partir da pasta do módulo correspondente (o código carrega `config.yaml` e outros arquivos relativos ao diretório de execução):
 
 **Com TRiSM (CLI interativo):**
 ```bash
-python IA_com_TRiSM/trism_chat/main.py
+cd IA_com_TRiSM/trism_chat
+python main.py
 ```
 
 **Com TRiSM (servidor FastAPI, com API REST e documentação Swagger):**
 ```bash
-python IA_com_TRiSM/trism_chat/main_server.py
+cd IA_com_TRiSM/trism_chat
+python main_server.py
 # Documentação interativa em http://localhost:8000/docs
 ```
 > Detalhes completos dos endpoints em [`IA_com_TRiSM/trism_chat/README_FASTAPI.md`](IA_com_TRiSM/trism_chat/README_FASTAPI.md).
 
 **Sem TRiSM (baseline):**
 ```bash
-python IA_sem_TRiSM/chat.py
+cd IA_sem_TRiSM
+python chat.py
 ```
 
 ### 🧪 Benchmark e Testes
@@ -259,4 +262,4 @@ Ver arquivo [LICENSE](LICENSE) para detalhes.
 
 ---
 
-**Desenvolvido como demonstração dos pilares TRiSM em sistemas de IA generativa**
+**Desenvolvido como demonstração dos pilares AI TRiSM em sistemas de IA generativa**
